@@ -15,9 +15,9 @@ def main(config):
     data_loader = getattr(module_data, config['data_loader']['type'])(
         config['data_loader']['args']['data_dir'],
         batch_size=512,
-        shuffle=False,
-        validation_split=0.0,
-        training=False,
+        shuffle=True,
+        # validation_split=0.0,
+        # training=False,
         num_workers=2
     )
 
@@ -60,19 +60,21 @@ def main(config):
             for i, metric in enumerate(metric_fns):
                 total_metrics[i] += metric(output, target) * batch_size
 
-    n_samples = len(data_loader.sampler)
+    n_samples = len(data_loader.data_loader.dataset)
     log = {'loss': total_loss / n_samples}
     log.update({
         met.__name__: total_metrics[i].item() / n_samples for i, met in enumerate(metric_fns)
     })
     logger.info(log)
 
+DEFAULT_CONFIG_PATH = r"C:\Users\fisar\Desktop\Diplomka\pytorch-template-master\configs\config_CICIoV_split.json"
+DEFAULT_MODEL = r"C:\Users\fisar\Desktop\Diplomka\pytorch-template-master\saved\models\CICIoV2024_split\0302_123315\model_best.pth"
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser(description='PyTorch Template')
-    args.add_argument('-c', '--config', default=None, type=str,
-                      help='config file path (default: None)')
-    args.add_argument('-r', '--resume', default=None, type=str,
+    args.add_argument('-c', '--config', default=DEFAULT_CONFIG_PATH, type=str,
+                      help='config file path (default: split)')
+    args.add_argument('-r', '--resume', default=DEFAULT_MODEL, type=str,
                       help='path to latest checkpoint (default: None)')
     args.add_argument('-d', '--device', default=None, type=str,
                       help='indices of GPUs to enable (default: all)')

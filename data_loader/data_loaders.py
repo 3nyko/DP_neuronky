@@ -189,21 +189,24 @@ class CICIoV2024_DataLoader:
     """
     DataLoader for CICIoV2024_split dataset (uses predefined train.csv and val.csv instead of random split)
     """
-    def __init__(self, data_dir, batch_size, mode=DEFAULT_MODE, num_workers=2, shuffle=True):
+    def __init__(self, data_dir, batch_size, mode=DEFAULT_MODE, num_workers=2, shuffle=True, split="train", multiclass=USE_MULTICLASS):
         self.batch_size = batch_size
-        # trénovací dataset
-        train_dataset = CICIoV2024_Dataset(data_dir=data_dir, mode=mode, split="train", multiclass=USE_MULTICLASS)
+        # dataset
+        dataset = CICIoV2024_Dataset(data_dir=data_dir, mode=mode, split=split, multiclass=multiclass)
+        shuff = shuffle if split=="train" else False
         self.data_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers
+            dataset, batch_size=batch_size, shuffle=shuff, num_workers=num_workers
         )
 
-        # validační dataset
-        val_dataset = CICIoV2024_Dataset(data_dir=data_dir, mode=mode, split="val", multiclass=USE_MULTICLASS)
-        self.valid_data_loader = torch.utils.data.DataLoader(
-            val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
-        )
+        # valid loader
+        self.valid_data_loader = None
+        if split == "train":
+            val_dataset = CICIoV2024_Dataset(data_dir=data_dir, mode=mode, split="val", multiclass=multiclass)
+            self.valid_data_loader = torch.utils.data.DataLoader(
+                val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+            )
 
-        self.input_dim = train_dataset[0][0].shape[-1] # velikost dat (pro vstupni neur vrstvu) - 8
+        self.input_dim = dataset[0][0].shape[-1] # velikost dat (pro vstupni neur vrstvu) - 8
         self.mode = mode
 
     def __iter__(self):

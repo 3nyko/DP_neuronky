@@ -18,8 +18,17 @@ class BaseModel(nn.Module):
 
     def __str__(self):
         """
-        Model prints with number of trainable parameters
+        Model prints with total and trainable parameters
         """
-        model_parameters = filter(lambda p: p.requires_grad, self.parameters())
-        params = sum([np.prod(p.size()) for p in model_parameters])
-        return super().__str__() + '\nTrainable parameters: {}'.format(params)
+        total_params = sum(p.numel() for p in self.parameters())
+        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        non_trainable_params = total_params - trainable_params
+
+        base_str = super().__str__()
+
+        return (
+            f"{base_str}\n"
+            f"Total parameters: {total_params}\n"
+            f"Trainable parameters: {trainable_params}\n"
+            f"Non-trainable parameters: {non_trainable_params}"
+        )

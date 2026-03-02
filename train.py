@@ -29,8 +29,6 @@ np.random.seed(SEED)
 def main(config):
     logger = config.get_logger('train')
 
-    start_tensorboard_for_latest()
-
     # setup data_loader instances
     data_loader = config.init_obj('data_loader', module_data)
     valid_data_loader = data_loader.split_validation()
@@ -41,7 +39,8 @@ def main(config):
     logger.info(model)
 
     # prepare for (multi-device) GPU training
-    device, device_ids = prepare_device(config['n_gpu'])
+    device, device_ids = prepare_device(config['n_gpu']) 
+    #TODO: print that gpu is used
     model = model.to(device)
     if len(device_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=device_ids)
@@ -61,6 +60,8 @@ def main(config):
                       data_loader=data_loader,
                       valid_data_loader=valid_data_loader,
                       lr_scheduler=lr_scheduler)
+    
+    start_tensorboard_for_latest()
 
     trainer.train()
 
@@ -69,28 +70,71 @@ def start_tensorboard():
     subprocess.Popen(["tensorboard", "--logdir", log_dir, "--port", "6006"])
     threading.Timer(2.0, lambda: webbrowser.open("http://localhost:6006")).start()
 
-def start_tensorboard_for_latest(base_log_dir="saved/log/CICIoV2024_split", port=6006):
+def _latest_event_mtime(run_dir: Path) -> float:
+    """Return mtime of newest TensorBoard event file inside run_dir, or 0 if none."""
+    event_files = list(run_dir.glob("events.out.tfevents.*"))
+    if not event_files:
+        return 0.0
+    return max(f.stat().st_mtime for f in event_files)
+
+
+def _get_latest_run_by_event(base: Path) -> Path | None:
+    """Pick the run dir whose newest event file was modified most recently."""
+    best_dir = None
+    best_time = 0.0
+
+    for d in base.iterdir():
+        if not d.is_dir():
+            continue
+        t = _latest_event_mtime(d)
+        if t > best_time:
+            best_time = t
+            best_dir = d
+
+    return best_dir
+
+def start_tensorboard_for_latest(base_log_dir="saved/log/CICIoV2024_split", port=6006, keep_last=15, reload_interval=10):
     base = Path(base_log_dir)
     if not base.exists():
         print(f"[TensorBoard] Log dir not found: {base.resolve()}")
         return
 
-    # Najdi nejnovější podadresář
     subdirs = [d for d in base.iterdir() if d.is_dir()]
     if not subdirs:
         print(f"[TensorBoard] No subdirectories in {base}")
         return
 
-    latest_run = max(subdirs, key=lambda p: p.stat().st_mtime)
-    print(f"[TensorBoard] Starting TensorBoard for: {latest_run}")
+    # ✅ Windows-safe: latest run = run with most recently modified event file
+    latest_run = _get_latest_run_by_event(base)
+    if latest_run is None:
+        print(f"[TensorBoard] No event files found in {base} (events.out.tfevents.*).")
+        return
 
-    # Spusť TensorBoard pouze pro aktuální běh
+    # history: vyber posledních N podle času event souboru (ne podle mtime složky)
+    subdirs_sorted_by_event = sorted(subdirs, key=_latest_event_mtime)
+    recent_runs = [d for d in subdirs_sorted_by_event if _latest_event_mtime(d) > 0][-keep_last:]
+
+    # aby se CURRENT nepřebíjel stejným adresářem
+    recent_runs = [d for d in recent_runs if d.resolve() != latest_run.resolve()]
+
+    # poskládáme logdir_spec: nejdřív minulost, nakonec CURRENT (ať nic nepřebije)
+    parts = [f"{d.name}:{d}" for d in recent_runs]
+    parts.append(f"CURRENT:{latest_run}")
+    logdir_spec = ",".join(parts)
+
+    print(f"[TensorBoard] Base: {base}")
+    print(f"[TensorBoard] CURRENT run: {latest_run.name}")
+    print(f"[TensorBoard] Showing {len(recent_runs)} previous runs + CURRENT")
+    print(f"[TensorBoard] Reload interval: {reload_interval}s")
+
     cmd = [
         sys.executable, "-m", "tensorboard.main",
-        "--logdir", str(latest_run),
+        "--logdir_spec", logdir_spec,
+        "--reload_interval", str(reload_interval),
         "--port", str(port),
         "--host", "127.0.0.1",
     ]
+
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     threading.Timer(2.0, lambda: webbrowser.open(f"http://localhost:{port}")).start()
 
