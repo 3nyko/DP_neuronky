@@ -1,9 +1,9 @@
 {
-    "name": "CICIoV2024_split",
+    "name": "CNN_light",
     "n_gpu": 1,
 
     "arch": {
-        "type": "model_NN_1",
+        "type": "model_CNN_light",
         "args": {}
     },
     "data_loader": {
@@ -42,7 +42,7 @@
         "verbosity": 2,
         
         "monitor": "min val_loss",
-        "early_stop": 10,
+        "early_stop": 5,
 
         "tensorboard": true
     }

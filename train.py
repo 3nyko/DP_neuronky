@@ -17,7 +17,8 @@ import threading
 import webbrowser
 from pathlib import Path
 
-DEFAULT_CONFIG_PATH = r"C:\Users\fisar\Desktop\Diplomka\pytorch-template-master\configs\config_CICIoV_split.json"
+from params import DEFAULT_CONFIG_PATH
+
 
 # fix random seeds for reproducibility
 SEED = 123

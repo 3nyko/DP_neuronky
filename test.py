@@ -7,6 +7,7 @@ import model.metric as module_metric
 import model.model as module_arch
 from parse_config import ConfigParser
 
+from params import DEFAULT_CONFIG_PATH, DEFAULT_MODEL
 
 def main(config):
     logger = config.get_logger('test')
@@ -67,8 +68,6 @@ def main(config):
     })
     logger.info(log)
 
-DEFAULT_CONFIG_PATH = r"C:\Users\fisar\Desktop\Diplomka\pytorch-template-master\configs\config_CICIoV_split.json"
-DEFAULT_MODEL = r"C:\Users\fisar\Desktop\Diplomka\pytorch-template-master\saved\models\CICIoV2024_split\0302_123315\model_best.pth"
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser(description='PyTorch Template')
