@@ -5,9 +5,15 @@ dict_conf = {
     "NN_1" : "config_CICIoV_split", # první neuronka
     "CNN_1" : "config_CNN_1", # první konvolučka
     "CNN_light" : "config_CNN_light", # lehčí konvolučka
+    "CNN_residual" : "config_CNN_residual",
+    "NN_2" : "config_NN_2",
+    "NN_3" : "config_NN_3",
+    "CNN_2" : "config_CNN_2",
+    "CNN_3" : "config_CNN_3", 
+    "CNN_SE_Res" : "config_CNN_SE_Res", 
 }
 
-CURRENT_CONF = dict_conf['CNN_light']
+CURRENT_CONF = dict_conf['CNN_SE_Res']
 
 
 

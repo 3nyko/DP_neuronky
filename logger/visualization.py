@@ -40,12 +40,20 @@ class TensorboardWriter():
     def set_step(self, step, mode='train'):
         self.mode = mode
         self.step = step
-        if step == 0:
-            self.timer = datetime.now()
-        else:
-            duration = datetime.now() - self.timer
-            self.add_scalar('steps_per_sec', 1 / duration.total_seconds())
-            self.timer = datetime.now()
+
+        now = datetime.now()
+
+        if step == 0 or self.timer is None:
+            self.timer = now
+            return
+
+        duration = now - self.timer
+        seconds = duration.total_seconds()
+
+        if seconds > 0:
+            self.add_scalar('steps_per_sec', 1 / seconds)
+
+        self.timer = now
 
     def __getattr__(self, name):
         """
@@ -65,9 +73,8 @@ class TensorboardWriter():
                     add_data(tag, data, self.step, *args, **kwargs)
             return wrapper
         else:
-            # default action for returning methods defined in this class, set_step() for instance.
             try:
-                attr = object.__getattr__(name)
+                attr = object.__getattribute__(self, name)
             except AttributeError:
                 raise AttributeError("type object '{}' has no attribute '{}'".format(self.selected_module, name))
             return attr
