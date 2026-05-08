@@ -1,4 +1,8 @@
 import argparse
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from tqdm import tqdm
 import data_loader.data_loaders as module_data
@@ -30,8 +34,18 @@ def main(config):
     loss_fn = getattr(module_loss, config['loss'])
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
-    logger.info('Loading checkpoint: {} ...'.format(config.resume))
-    checkpoint = torch.load(config.resume)
+    resume_path = config.resume
+    if resume_path is None:
+        raise RuntimeError(
+            "No checkpoint given (DEFAULT_MODEL is unset — train first or pass -r path/to/model_best.pth)."
+        )
+    resume_path = Path(resume_path).expanduser().resolve()
+    if not resume_path.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {resume_path}")
+
+    logger.info('Loading checkpoint: {} ...'.format(resume_path))
+    # Full checkpoints include pickled training state (not tensors-only); PyTorch 2.6+ defaults weights_only=True.
+    checkpoint = torch.load(resume_path, map_location='cpu', weights_only=False)
     state_dict = checkpoint['state_dict']
     if config['n_gpu'] > 1:
         model = torch.nn.DataParallel(model)
@@ -44,11 +58,16 @@ def main(config):
 
     total_loss = 0.0
     total_metrics = torch.zeros(len(metric_fns))
+    all_targets = []
+    all_preds = []
 
     with torch.no_grad():
         for i, (data, target) in enumerate(tqdm(data_loader)):
             data, target = data.to(device), target.to(device)
             output = model(data)
+            preds = torch.argmax(output, dim=1)
+            all_targets.append(target.detach().cpu())
+            all_preds.append(preds.detach().cpu())
 
             #
             # save sample images, or do something with output here
@@ -67,6 +86,56 @@ def main(config):
         met.__name__: total_metrics[i].item() / n_samples for i, met in enumerate(metric_fns)
     })
     logger.info(log)
+
+    # Build and save confusion matrix as PDF.
+    y_true = torch.cat(all_targets).numpy()
+    y_pred = torch.cat(all_preds).numpy()
+
+    max_true = int(y_true.max()) if y_true.size else 0
+    max_pred = int(y_pred.max()) if y_pred.size else 0
+    n_classes = max(max_true, max_pred) + 1
+    cm = np.zeros((n_classes, n_classes), dtype=np.int64)
+    np.add.at(cm, (y_true, y_pred), 1)
+
+    class_labels = [str(i) for i in range(n_classes)]
+    if n_classes == len(module_data.MULTICLASS_DICT):
+        inv_map = {v: k for k, v in module_data.MULTICLASS_DICT.items()}
+        class_labels = [inv_map.get(i, str(i)) for i in range(n_classes)]
+    elif n_classes == len(module_data.BINCLASS_DICT):
+        inv_map = {v: k for k, v in module_data.BINCLASS_DICT.items()}
+        class_labels = [inv_map.get(i, str(i)) for i in range(n_classes)]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(cm, interpolation='nearest', cmap="Blues")
+    ax.figure.colorbar(im, ax=ax)
+    ax.set(
+        xticks=np.arange(n_classes),
+        yticks=np.arange(n_classes),
+        xticklabels=class_labels,
+        yticklabels=class_labels,
+        ylabel='True label',
+        xlabel='Predicted label',
+        title='Confusion Matrix'
+    )
+    plt.setp(ax.get_xticklabels(), rotation=45, ha='right', rotation_mode='anchor')
+
+    thresh = cm.max() / 2.0 if cm.size else 0.0
+    for i in range(n_classes):
+        for j in range(n_classes):
+            ax.text(
+                j,
+                i,
+                format(cm[i, j], 'd'),
+                ha='center',
+                va='center',
+                color='white' if cm[i, j] > thresh else 'black'
+            )
+
+    fig.tight_layout()
+    output_pdf = Path(config.log_dir) / "confusion_matrix.pdf"
+    fig.savefig(output_pdf, format='pdf', bbox_inches='tight')
+    plt.close(fig)
+    logger.info(f"Saved confusion matrix to: {output_pdf}")
 
 
 if __name__ == '__main__':

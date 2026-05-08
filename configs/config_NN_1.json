@@ -1,5 +1,5 @@
 {
-    "name": "CICIoV2024_split",
+    "name": "NN_1",
     "n_gpu": 1,
 
     "arch": {
@@ -42,7 +42,7 @@
         "verbosity": 2,
         
         "monitor": "min val_loss",
-        "early_stop": 10,
+        "early_stop": 5,
 
         "tensorboard": true
     }

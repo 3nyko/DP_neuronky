@@ -1,5 +1,5 @@
 {
-    "name": "config_CNN_3",
+    "name": "CNN_3",
     "n_gpu": 1,
 
     "arch": {

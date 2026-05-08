@@ -3,3 +3,4 @@ torchvision
 numpy
 tqdm
 tensorboard>=1.14
+matplotlib>=3.8

@@ -13,6 +13,7 @@ from utils import prepare_device
 import os
 import sys
 import subprocess
+from datetime import datetime
 import threading
 import webbrowser
 from pathlib import Path
@@ -41,7 +42,11 @@ def main(config):
 
     # prepare for (multi-device) GPU training
     device, device_ids = prepare_device(config['n_gpu']) 
-    #TODO: print that gpu is used
+    if device.type == 'cuda':
+        gpu_name = torch.cuda.get_device_name(device.index or 0)
+        logger.info(f"GPU available: True | using device: {device} ({gpu_name})")
+    else:
+        logger.info("GPU available: False | using CPU")
     model = model.to(device)
     if len(device_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=device_ids)
@@ -62,9 +67,26 @@ def main(config):
                       valid_data_loader=valid_data_loader,
                       lr_scheduler=lr_scheduler)
     
-    start_tensorboard_for_latest()
+    run_id = Path(config.log_dir).name
+    experiment_name = config['name']
+    current_run_label = f"{experiment_name}_{run_id}"
+    start_tensorboard_for_latest(
+        base_log_dir=str(Path(config.log_dir).parent),
+        current_run_dir=Path(config.log_dir),
+        current_run_label=current_run_label
+    )
+
+    train_start = datetime.now()
+    logger.info(f"Training started at {train_start.strftime('%Y-%m-%d %H:%M:%S')}")
 
     trainer.train()
+
+    train_end = datetime.now()
+    elapsed = train_end - train_start
+    logger.info(f"Training finished at {train_end.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(
+        f"Total training time: {elapsed.total_seconds():.2f}s ({elapsed})"
+    )
 
 def start_tensorboard():
     log_dir = os.path.join("saved", "log")
@@ -94,7 +116,17 @@ def _get_latest_run_by_event(base: Path) -> Path | None:
 
     return best_dir
 
-def start_tensorboard_for_latest(base_log_dir="saved/log/CICIoV2024_split", port=6006, keep_last=15, reload_interval=10):
+def _sanitize_tb_label(label: str) -> str:
+    return label.replace(":", "_").replace(",", "_")
+
+def start_tensorboard_for_latest(
+    base_log_dir="saved/log/NN_1",
+    port=6006,
+    keep_last=15,
+    reload_interval=10,
+    current_run_dir: Path | None = None,
+    current_run_label: str | None = None
+):
     base = Path(base_log_dir)
     if not base.exists():
         print(f"[TensorBoard] Log dir not found: {base.resolve()}")
@@ -105,8 +137,9 @@ def start_tensorboard_for_latest(base_log_dir="saved/log/CICIoV2024_split", port
         print(f"[TensorBoard] No subdirectories in {base}")
         return
 
-    # ✅ Windows-safe: latest run = run with most recently modified event file
-    latest_run = _get_latest_run_by_event(base)
+    # Prefer the run that is currently being trained (if provided),
+    # otherwise fallback to the latest run by event timestamp.
+    latest_run = current_run_dir if current_run_dir is not None else _get_latest_run_by_event(base)
     if latest_run is None:
         print(f"[TensorBoard] No event files found in {base} (events.out.tfevents.*).")
         return
@@ -115,17 +148,19 @@ def start_tensorboard_for_latest(base_log_dir="saved/log/CICIoV2024_split", port
     subdirs_sorted_by_event = sorted(subdirs, key=_latest_event_mtime)
     recent_runs = [d for d in subdirs_sorted_by_event if _latest_event_mtime(d) > 0][-keep_last:]
 
-    # aby se CURRENT nepřebíjel stejným adresářem
+    # avoid duplicating the same active run in history
     recent_runs = [d for d in recent_runs if d.resolve() != latest_run.resolve()]
 
-    # poskládáme logdir_spec: nejdřív minulost, nakonec CURRENT (ať nic nepřebije)
+    # Build logdir_spec: older runs first, active run last.
     parts = [f"{d.name}:{d}" for d in recent_runs]
-    parts.append(f"CURRENT:{latest_run}")
+    active_label = _sanitize_tb_label(current_run_label or latest_run.name)
+    parts.append(f"{active_label}:{latest_run}")
     logdir_spec = ",".join(parts)
 
     print(f"[TensorBoard] Base: {base}")
-    print(f"[TensorBoard] CURRENT run: {latest_run.name}")
-    print(f"[TensorBoard] Showing {len(recent_runs)} previous runs + CURRENT")
+    print(f"[TensorBoard] Active run: {active_label}")
+    print(f"[TensorBoard] Active run dir: {latest_run.name}")
+    print(f"[TensorBoard] Showing {len(recent_runs)} previous runs + active run")
     print(f"[TensorBoard] Reload interval: {reload_interval}s")
 
     cmd = [

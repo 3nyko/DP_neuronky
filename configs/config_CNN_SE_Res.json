@@ -1,5 +1,5 @@
 {
-    "name": "config_CNN_SE_Res",
+    "name": "CNN_SE_Res",
     "n_gpu": 1,
 
     "arch": {

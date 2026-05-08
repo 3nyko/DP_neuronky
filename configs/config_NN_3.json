@@ -1,5 +1,5 @@
 {
-    "name": "config_NN_3",
+    "name": "NN_3",
     "n_gpu": 1,
 
     "arch": {

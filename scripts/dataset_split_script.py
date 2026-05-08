@@ -20,7 +20,7 @@ def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
 
 def process_mode(mode):
-    """Combine all CSVs from one mode, shuffle, split, and save as train/val/test CSV files."""
+    """Split each CSV first, then merge train/val/test parts and save."""
     mode_dir = os.path.join(DATASET_PATH, mode)
     if not os.path.isdir(mode_dir):
         print(f"Missing folder: {mode_dir}")
@@ -33,29 +33,50 @@ def process_mode(mode):
 
     print(f"Processing mode: {mode} ({len(all_files)} files)")
 
-    # Načtení a sloučení všech CSV
-    df_list = []
+    # Každý CSV rozdělíme samostatně na train/val/test
+    train_parts = []
+    val_parts = []
+    test_parts = []
+
     for fpath in all_files:
         try:
             df = pd.read_csv(fpath, low_memory=False)
-            df_list.append(df)
+            if df.empty:
+                print(f"Skipping empty file: {fpath}")
+                continue
+
+            # Split 1: odděl test část
+            trainval_df, test_df = train_test_split(
+                df, test_size=TEST_SPLIT, random_state=RANDOM_STATE, shuffle=True
+            )
+
+            # Split 2: z trainval odděl validation tak, aby celkové poměry zůstaly stejné
+            relative_val_split = VAL_SPLIT / (TRAIN_SPLIT + VAL_SPLIT)
+            train_df, val_df = train_test_split(
+                trainval_df, test_size=relative_val_split, random_state=RANDOM_STATE, shuffle=True
+            )
+
+            train_parts.append(train_df)
+            val_parts.append(val_df)
+            test_parts.append(test_df)
         except Exception as e:
             print(f"Error reading {fpath}: {e}")
 
-    combined_df = pd.concat(df_list, ignore_index=True)
-    print(f"Combined shape: {combined_df.shape}")
+    if not train_parts or not val_parts or not test_parts:
+        print(f"No usable CSV data found in {mode_dir}")
+        return
 
-    # Náhodné promíchání všech řádků
-    combined_df = combined_df.sample(frac=1, random_state=RANDOM_STATE).reset_index(drop=True)
+    # Sloučení stejných částí napříč všemi CSV
+    train_df = pd.concat(train_parts, ignore_index=True)
+    val_df = pd.concat(val_parts, ignore_index=True)
+    test_df = pd.concat(test_parts, ignore_index=True)
 
-    # Rozdělení datasetu
-    trainval_df, test_df = train_test_split(
-        combined_df, test_size=TEST_SPLIT, random_state=RANDOM_STATE, shuffle=True
-    )
-    relative_val_split = VAL_SPLIT / (TRAIN_SPLIT + VAL_SPLIT)
-    train_df, val_df = train_test_split(
-        trainval_df, test_size=relative_val_split, random_state=RANDOM_STATE, shuffle=True
-    )
+    # Finální shuffle každé části
+    train_df = train_df.sample(frac=1, random_state=RANDOM_STATE).reset_index(drop=True)
+    val_df = val_df.sample(frac=1, random_state=RANDOM_STATE).reset_index(drop=True)
+    test_df = test_df.sample(frac=1, random_state=RANDOM_STATE).reset_index(drop=True)
+
+    print(f"Combined split sizes -> train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)}")
 
     # Uložení do výstupních CSV
     out_dir = os.path.join(OUTPUT_PATH, mode)

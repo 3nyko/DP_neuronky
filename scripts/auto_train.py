@@ -9,8 +9,8 @@ import train
 from parse_config import ConfigParser
 
 
-# MODELS_TO_TRAIN = ['NN_2', 'NN_3', 'CNN_2', 'CNN_3', 'CNN_SE_Res']
-MODELS_TO_TRAIN = ['CNN_SE_Res']
+# MODELS_TO_TRAIN = ['NN_1', 'CNN_1', 'CNN_light', 'CNN_residual','NN_2', 'NN_3', 'CNN_2', 'CNN_3', 'CNN_SE_Res']
+MODELS_TO_TRAIN = ['NN_1']
 
 
 def train_model(conf_path: str):
