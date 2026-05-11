@@ -1,9 +1,9 @@
 {
-    "name": "CNN_light",
+    "name": "CNN_LSTM",
     "n_gpu": 1,
 
     "arch": {
-        "type": "model_CNN_light",
+        "type": "model_CNN_LSTM",
         "args": {}
     },
     "data_loader": {
@@ -17,8 +17,8 @@
     },
     "optimizer": {
         "type": "Adam",
-        "args":{
-            "lr": 0.001,
+        "args": {
+            "lr": 0.0025,
             "weight_decay": 0,
             "amsgrad": true
         }

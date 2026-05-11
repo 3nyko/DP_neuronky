@@ -2,22 +2,29 @@ import os
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-# ===============================
-# CONFIG
-# ===============================
+# =====================================================
+# =========       Constants and options       =========
+# =====================================================
+
 DATASET_PATH = r"C:\Users\fisar\Desktop\Diplomka\pytorch-template-master\data\CICIoV2024"
 OUTPUT_PATH = r"C:\Users\fisar\Desktop\Diplomka\pytorch-template-master\data\CICIoV2024_split"
 
-VAL_SPLIT = 0.1
-TEST_SPLIT = 0.2
-TRAIN_SPLIT = 1 - (VAL_SPLIT + TEST_SPLIT)
-RANDOM_STATE = 42
+MODES = ["binary", "decimal", "hexadecimal"]
 
-# ===============================
-# HELPERS
-# ===============================
+VAL_SPLIT = 0.2
+TEST_SPLIT = 0.1
+TRAIN_SPLIT = 1 - (VAL_SPLIT + TEST_SPLIT)
+RANDOM_STATE = 200701
+
+
+# =====================================================
+# =========           Functions               =========
+# =====================================================
+
 def ensure_dir(path):
+    """Create directory if it doesn't exist."""
     os.makedirs(path, exist_ok=True)
+
 
 def process_mode(mode):
     """Split each CSV first, then merge train/val/test parts and save."""
@@ -88,10 +95,18 @@ def process_mode(mode):
 
     print(f"Saved: train ({len(train_df)}), val ({len(val_df)}), test ({len(test_df)})")
 
-# ===============================
-# MAIN
-# ===============================
-for mode in ["binary", "decimal", "hexadecimal"]:
-    process_mode(mode)
 
-print("\nAll splits completed and saved to:", OUTPUT_PATH)
+# =====================================================
+# =========              Main                 =========
+# =====================================================
+
+def main():
+    """Split raw CICIoV2024 CSVs into train/val/test for each mode."""
+    for mode in MODES:
+        process_mode(mode)
+
+    print("\nAll splits completed and saved to:", OUTPUT_PATH)
+
+
+if __name__ == "__main__":
+    main()

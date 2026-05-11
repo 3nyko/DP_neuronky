@@ -1,9 +1,9 @@
 {
-    "name": "CNN_light",
+    "name": "NN_1",
     "n_gpu": 1,
 
     "arch": {
-        "type": "model_CNN_light",
+        "type": "model_NN_1",
         "args": {}
     },
     "data_loader": {
@@ -16,6 +16,7 @@
         }
     },
     "optimizer": {
+
         "type": "Adam",
         "args":{
             "lr": 0.001,

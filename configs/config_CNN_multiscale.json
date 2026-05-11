@@ -1,9 +1,9 @@
 {
-    "name": "CNN_light",
+    "name": "CNN_multiscale",
     "n_gpu": 1,
 
     "arch": {
-        "type": "model_CNN_light",
+        "type": "model_CNN_multiscale",
         "args": {}
     },
     "data_loader": {
@@ -17,21 +17,22 @@
     },
     "optimizer": {
         "type": "Adam",
-        "args":{
+        "args": {
             "lr": 0.001,
-            "weight_decay": 0,
+            "weight_decay": 0.0001,
             "amsgrad": true
         }
     },
     "loss": "nll_loss",
     "metrics": [
-        "accuracy", "top_k_acc"
+        "accuracy",
+        "top_k_acc"
     ],
     "lr_scheduler": {
-        "type": "StepLR",
+        "type": "CosineAnnealingLR",
         "args": {
-            "step_size": 50,
-            "gamma": 0.1
+            "T_max": 100,
+            "eta_min": 1e-6
         }
     },
     "trainer": {
@@ -39,9 +40,9 @@
         "save_dir": "saved/",
         "save_period": 1,
         "verbosity": 2,
-        
-        "monitor": "min val_loss",
-        "early_stop": 5,
+
+        "monitor": "max val_accuracy",
+        "early_stop": 15,
 
         "tensorboard": true
     }

@@ -1,15 +1,16 @@
-"""
-Insert Training started (before epoch logs) and append Training finished / duration
-to old info.log files — same messages as train.py, chronological order.
-
-Removes prior backfill lines if present so you can re-run to repair placement.
-"""
 from __future__ import annotations
 
 import argparse
 import re
 from datetime import datetime
 from pathlib import Path
+
+# =====================================================
+# =========       Constants and options       =========
+# =====================================================
+
+DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "saved" / "log"
+DEFAULT_GLOB = "**/info.log"
 
 TS_LINE = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3}) - (train|trainer) - INFO - "
@@ -20,12 +21,18 @@ BACKFILL_LINE = re.compile(
 )
 
 
+# =====================================================
+# =========           Functions               =========
+# =====================================================
+
 def parse_ts(head: str, ms: str) -> datetime:
+    """Parse timestamp string + milliseconds into datetime."""
     base = datetime.strptime(head, "%Y-%m-%d %H:%M:%S")
     return base.replace(microsecond=int(ms) * 1000)
 
 
 def strip_backfill(lines: list[str]) -> list[str]:
+    """Remove any previously inserted backfill lines."""
     return [ln for ln in lines if not BACKFILL_LINE.match(ln)]
 
 
@@ -33,8 +40,8 @@ def analyze_lines(
     lines: list[str],
 ) -> tuple[datetime, datetime, str, str, int] | None:
     """
-    Return start_dt, end_dt, start_asctime, end_asctime, last_train_line_idx
-    (insert Training started after this line).
+    Return (start_dt, end_dt, start_asctime, end_asctime, last_train_line_idx).
+    Insert "Training started" after last_train_line_idx.
     """
     first_trainer_idx = None
     last_train_idx = None
@@ -73,6 +80,7 @@ def analyze_lines(
 
 
 def process_file(path: Path, dry_run: bool, max_seconds: float | None) -> str:
+    """Insert training start/finish timestamps into a single log file."""
     text = path.read_text(encoding="utf-8", errors="replace")
     lines = strip_backfill(text.splitlines())
     parsed = analyze_lines(lines)
@@ -104,18 +112,22 @@ def process_file(path: Path, dry_run: bool, max_seconds: float | None) -> str:
     return f"wrote duration={elapsed}"
 
 
+# =====================================================
+# =========              Main                 =========
+# =====================================================
+
 def main():
+    """
+    Insert "Training started" (before epoch logs) and append "Training finished" / duration
+    to old info.log files — same messages as train.py, in chronological order.
+
+    Removes prior backfill lines if present so you can re-run to repair placement.
+    """
     ap = argparse.ArgumentParser()
+    ap.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    ap.add_argument("--glob", default=DEFAULT_GLOB)
     ap.add_argument(
-        "--root",
-        type=Path,
-        default=Path(__file__).resolve().parent.parent / "saved" / "log",
-    )
-    ap.add_argument("--glob", default="**/info.log")
-    ap.add_argument(
-        "--max-hours",
-        type=float,
-        default=None,
+        "--max-hours", type=float, default=None,
         help="Skip if inferred duration exceeds this (hours).",
     )
     ap.add_argument("--dry-run", action="store_true")
