@@ -17,7 +17,6 @@ CONFIGS_DICT = {
     "CNN_2"             : "config_CNN_2",
     "CNN_3"             : "config_CNN_3",
     "CNN_SE_Res"        : "config_CNN_SE_Res",
-    "NN_vector_resnet"  : "config_NN_vector_resnet",
     "tab_ft_transformer": "config_tab_ft_transformer",
     "CNN_multiscale"    : "config_CNN_multiscale",
     "CNN_LSTM"          : "config_CNN_LSTM",

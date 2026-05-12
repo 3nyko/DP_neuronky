@@ -1,0 +1,47 @@
+{
+    "name": "autoencoder_deep",
+    "n_gpu": 1,
+
+    "arch": {
+        "type": "model_autoencoder_deep",
+        "args": {}
+    },
+    "data_loader": {
+        "type": "CICIoV2024_Autoencoder_DataLoader",
+        "args": {
+            "data_dir": "data/CICIoV2024_autoencoder",
+            "batch_size": 256,
+            "shuffle": true,
+            "num_workers": 2
+        }
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 0.001,
+            "weight_decay": 0.0001
+        }
+    },
+    "loss": "mse_loss",
+    "metrics": [
+        "reconstruction_error"
+    ],
+    "lr_scheduler": {
+        "type": "CosineAnnealingLR",
+        "args": {
+            "T_max": 100,
+            "eta_min": 1e-6
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+        "save_dir": "saved/",
+        "save_period": 1,
+        "verbosity": 2,
+
+        "monitor": "min val_loss",
+        "early_stop": 15,
+
+        "tensorboard": true
+    }
+}

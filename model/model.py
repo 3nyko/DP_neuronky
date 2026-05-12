@@ -6,7 +6,7 @@ from base import BaseModel
 
 #NUM_CLASSES = 2 # BENIGN, ATTACK
 NUM_CLASSES = 6 # BENIGN, DOS, GAS, RPM, SPEED, STEERING_WHEEL
-INPUT_DIM = 8 # DATA_0 až _7
+INPUT_DIM = 9 # ID + DATA_0 až DATA_7
 
 # =====================================================
 # =========        CICIoV2024 modely          =========
@@ -507,38 +507,6 @@ class model_CNN_SE_Res(BaseModel):
         return x
 
 
-class model_NN_vector_resnet(BaseModel):
-    """
-    Deep residual MLP with pre-norm blocks. Strong baseline on low-dimensional tabular data:
-    residual paths stabilize depth; batch norm + dropout reduce overfitting vs. plain deep stacks.
-    """
-
-    def __init__(self, hidden_dim=256, num_blocks=6, dropout=0.2):
-        super().__init__()
-        self.in_proj = nn.Sequential(
-            nn.Linear(INPUT_DIM, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(),
-        )
-        self.blocks = nn.ModuleList(
-            [VectorResBlock(hidden_dim, dropout=dropout) for _ in range(num_blocks)]
-        )
-        self.head_bn = nn.BatchNorm1d(hidden_dim)
-        self.head_dropout = nn.Dropout(dropout)
-        self.fc_out = nn.Linear(hidden_dim, NUM_CLASSES)
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)
-        x = self.in_proj(x)
-        for block in self.blocks:
-            x = block(x)
-        x = self.head_bn(x)
-        x = F.relu(x)
-        x = self.head_dropout(x)
-        x = self.fc_out(x)
-        return F.log_softmax(x, dim=1)
-
-
 class model_tab_ft_transformer(BaseModel):
     """
     FT-Transformer-style model: each scalar feature is projected by its own linear layer (feature tokenizer),
@@ -705,6 +673,83 @@ class model_CNN_LSTM(BaseModel):
 
         x = self.fc(x)
         return F.log_softmax(x, dim=1)
+
+# =====================================================
+# =========       Autoencoder models          =========
+# =====================================================
+
+class model_autoencoder_shallow(BaseModel):
+    """
+    Simple symmetric autoencoder. Bottleneck forces compression;
+    trained with MSE on BENIGN only, anomalies produce high reconstruction error.
+    """
+
+    def __init__(self, input_dim=INPUT_DIM, bottleneck=4):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, bottleneck),
+            nn.ReLU(),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(bottleneck, 32),
+            nn.ReLU(),
+            nn.Linear(32, 64),
+            nn.ReLU(),
+            nn.Linear(64, input_dim),
+        )
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        z = self.encoder(x)
+        return self.decoder(z)
+
+
+class model_autoencoder_deep(BaseModel):
+    """
+    Deeper autoencoder with batch norm and dropout for better generalization.
+    Narrower bottleneck forces more abstract representation of normal traffic.
+    """
+
+    def __init__(self, input_dim=INPUT_DIM, bottleneck=3, dropout=0.1):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(64, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Linear(32, bottleneck),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(bottleneck, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(32, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(64, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Linear(128, input_dim),
+        )
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        z = self.encoder(x)
+        return self.decoder(z)
+
 
 # =====================================================
 # =========           MNIST model             =========

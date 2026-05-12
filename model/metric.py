@@ -19,3 +19,9 @@ def top_k_acc(output, target, k=3):
         for i in range(k):
             correct += torch.sum(pred[:, i] == target).item()
     return correct / len(target)
+
+
+def reconstruction_error(output, target):
+    """Mean absolute reconstruction error for autoencoders."""
+    with torch.no_grad():
+        return torch.mean(torch.abs(output - target)).item()

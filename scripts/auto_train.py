@@ -15,16 +15,15 @@ from parse_config import ConfigParser
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CONFIGS_DIR = os.path.join(PROJECT_ROOT, "configs")
 
-# MODELS_TO_TRAIN = [
-#     "NN_1", "CNN_1", "CNN_light", "CNN_residual",
-#     "NN_2", "NN_3", "CNN_2", "CNN_3", "CNN_SE_Res",
-#     "NN_vector_resnet", "tab_ft_transformer", "CNN_multiscale",
-#     "CNN_LSTM",
-# ]
+MODELS_TO_TRAIN = [
+    "NN_1", "CNN_1", "CNN_light", "CNN_residual",
+    "NN_2", "NN_3", "CNN_2", "CNN_3", "CNN_SE_Res", "tab_ft_transformer", "CNN_multiscale",
+    "CNN_LSTM",
+]
 
-# MODELS_TO_TRAIN = ['NN_vector_resnet', 'tab_ft_transformer', 'CNN_multiscale']
+# MODELS_TO_TRAIN = ['tab_ft_transformer', 'CNN_multiscale']
 # MODELS_TO_TRAIN = ['CNN_LSTM']
-MODELS_TO_TRAIN = ['NN_1']
+# MODELS_TO_TRAIN = ['NN_1']
 
 
 # =====================================================

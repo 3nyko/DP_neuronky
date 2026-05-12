@@ -1,32 +1,30 @@
 {
-    "name": "NN_vector_resnet",
+    "name": "autoencoder_shallow",
     "n_gpu": 1,
 
     "arch": {
-        "type": "model_NN_vector_resnet",
+        "type": "model_autoencoder_shallow",
         "args": {}
     },
     "data_loader": {
-        "type": "CICIoV2024_DataLoader",
+        "type": "CICIoV2024_Autoencoder_DataLoader",
         "args": {
-            "data_dir": "data/CICIoV2024_split",
-            "batch_size": 128,
+            "data_dir": "data/CICIoV2024_autoencoder",
+            "batch_size": 256,
             "shuffle": true,
             "num_workers": 2
         }
     },
     "optimizer": {
-        "type": "AdamW",
+        "type": "Adam",
         "args": {
             "lr": 0.001,
-            "weight_decay": 0.0001,
-            "amsgrad": true
+            "weight_decay": 0.0001
         }
     },
-    "loss": "nll_loss",
+    "loss": "mse_loss",
     "metrics": [
-        "accuracy",
-        "top_k_acc"
+        "reconstruction_error"
     ],
     "lr_scheduler": {
         "type": "CosineAnnealingLR",
@@ -41,7 +39,7 @@
         "save_period": 1,
         "verbosity": 2,
 
-        "monitor": "max val_accuracy",
+        "monitor": "min val_loss",
         "early_stop": 15,
 
         "tensorboard": true

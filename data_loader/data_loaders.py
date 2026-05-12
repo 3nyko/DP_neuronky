@@ -71,10 +71,14 @@ class CICIoV2024_Dataset(Dataset):
         self.labels = self._map_labels(label_data, multiclass)
 
     def _remove_labels(self, df):
-        """Return data columns (DATA_0 ... DATA_7)"""
-        feature_cols = [c for c in df.columns if c.startswith("DATA_")]
-        if not feature_cols:
+        """Return data columns (ID + DATA_0 ... DATA_7)"""
+        feature_cols = []
+        if "ID" in df.columns:
+            feature_cols.append("ID")
+        data_cols = [c for c in df.columns if c.startswith("DATA_")]
+        if not data_cols:
             raise ValueError("No DATA_ columns found in dataset.")
+        feature_cols.extend(data_cols)
         return df[feature_cols].values
 
     def _map_labels(self, labels, multiclass = False):
@@ -227,3 +231,110 @@ class CICIoV2024_DataLoader_no_split(BaseDataLoader):
                  shuffle=True, validation_split=0.1, num_workers=2):
         dataset = CICIoV2024_Dataset_no_split(data_dir=data_dir, mode=mode)
         super().__init__(dataset, batch_size, shuffle, validation_split, num_workers)
+
+
+# ========================================================
+# =========       Autoencoder Dataset/Loader     =========
+# ========================================================
+
+class CICIoV2024_Autoencoder_Dataset(Dataset):
+    """
+    Dataset for autoencoder training.
+    Returns (features, features) — input equals target (reconstruction task).
+    Labels are stored separately for evaluation but not used during training.
+    """
+
+    def __init__(self, data_dir, mode=DEFAULT_MODE, split="train"):
+        self.mode = mode
+        self.split = split
+
+        self.file_path = os.path.join(data_dir, self.mode.value, f"{split}.csv")
+        if not os.path.isfile(self.file_path):
+            raise FileNotFoundError(f"CSV file not found: {self.file_path}")
+
+        self.data = pd.read_csv(self.file_path, low_memory=False)
+        self.data.columns = [c.strip() for c in self.data.columns]
+
+        # feature columns (ID + DATA_0..7)
+        feature_cols = []
+        if "ID" in self.data.columns:
+            feature_cols.append("ID")
+        data_cols = [c for c in self.data.columns if c.startswith("DATA_")]
+        if not data_cols:
+            raise ValueError("No DATA_ columns found in dataset.")
+        feature_cols.extend(data_cols)
+        self.feature_values = self.data[feature_cols].values
+
+        # labels for evaluation (binary: 0=benign, 1=attack)
+        if "label" in self.data.columns:
+            self.labels = self.data["label"].str.upper().map(
+                lambda x: 0 if "BENIGN" in x else 1
+            ).values
+        else:
+            self.labels = None
+
+    def __len__(self):
+        return len(self.feature_values)
+
+    def __getitem__(self, idx):
+        data = self.feature_values[idx].copy()
+
+        def safe_int(val, base):
+            if isinstance(val, (int, float)):
+                return int(val)
+            s = str(val).strip()
+            if "." in s and s.replace(".", "").isdigit():
+                return int(float(s))
+            return int(s, base)
+
+        if self.mode in [Mode.BINARY, Mode.BINARY.value]:
+            data = [safe_int(v, base=2) for v in data]
+        elif self.mode in [Mode.HEXADECIMAL, Mode.HEXADECIMAL.value]:
+            data = [safe_int(v, base=16) for v in data]
+        elif self.mode in [Mode.DECIMAL, Mode.DECIMAL.value]:
+            data = [float(v) if not pd.isna(v) else 0.0 for v in data]
+        else:
+            raise ValueError(f"Unsupported mode: {self.mode}")
+
+        x = torch.tensor(data, dtype=torch.float32)
+
+        if self.labels is not None:
+            label = torch.tensor(self.labels[idx], dtype=torch.long)
+            return x, label
+        return x, x
+
+
+class CICIoV2024_Autoencoder_DataLoader:
+    """
+    DataLoader for autoencoder training on CICIoV2024_autoencoder dataset.
+    Train/val contain only BENIGN; test contains all classes.
+    """
+
+    def __init__(self, data_dir, batch_size, mode=DEFAULT_MODE, num_workers=2, shuffle=True, split="train"):
+        self.batch_size = batch_size
+
+        dataset = CICIoV2024_Autoencoder_Dataset(data_dir=data_dir, mode=mode, split=split)
+        shuff = shuffle if split == "train" else False
+        self.data_loader = torch.utils.data.DataLoader(
+            dataset, batch_size=batch_size, shuffle=shuff, num_workers=num_workers
+        )
+
+        self.valid_data_loader = None
+        if split == "train":
+            val_dataset = CICIoV2024_Autoencoder_Dataset(data_dir=data_dir, mode=mode, split="val")
+            self.valid_data_loader = torch.utils.data.DataLoader(
+                val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+            )
+
+        self.input_dim = dataset[0][0].shape[-1]
+        self.mode = mode
+
+    def __iter__(self):
+        return iter(self.data_loader)
+
+    def __len__(self):
+        return len(self.data_loader)
+
+    def split_validation(self):
+        """Return validation DataLoader"""
+        return self.valid_data_loader
