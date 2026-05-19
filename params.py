@@ -28,10 +28,32 @@ dict_conf = CONFIGS_DICT
 CURRENT_CONF = CONFIGS_DICT["NN_3"]
 DEFAULT_CONFIG_PATH = str(_ROOT / "configs" / f"{CURRENT_CONF}.json")
 
+AUTOENCODER_CONFIGS_DICT = {
+    "shallow": "config_autoencoder_shallow",
+    "deep": "config_autoencoder_deep",
+}
+
+CURRENT_AUTOENCODER = "deep"
+DEFAULT_AUTOENCODER_CONFIG_PATH = str(
+    _ROOT / "configs" / f"{AUTOENCODER_CONFIGS_DICT[CURRENT_AUTOENCODER]}.json"
+)
+
 
 # =====================================================
 # =========           Functions               =========
 # =====================================================
+
+def autoencoder_config_path(model=None, config_path=None) -> Path:
+    """
+    Resolve autoencoder JSON config from -m/--model key or explicit -c/--config path.
+    """
+    if config_path is not None:
+        return Path(config_path)
+    key = model or CURRENT_AUTOENCODER
+    if key not in AUTOENCODER_CONFIGS_DICT:
+        valid = ", ".join(sorted(AUTOENCODER_CONFIGS_DICT))
+        raise KeyError(f"Unknown autoencoder '{key}'. Choose from: {valid}")
+    return _ROOT / "configs" / f"{AUTOENCODER_CONFIGS_DICT[key]}.json"
 
 def find_newest_model(config_path: str) -> Path:
     """
@@ -58,13 +80,15 @@ def find_newest_model(config_path: str) -> Path:
         base = project_root / "saved" / "models" / stem
         if not base.is_dir():
             continue
-        subdirs = [p for p in base.iterdir() if p.is_dir()]
-        if not subdirs:
-            continue
-        latest_dir = max(subdirs, key=lambda p: p.stat().st_mtime)
-        candidate = latest_dir / "model_best.pth"
-        if candidate.is_file():
-            return candidate
+        subdirs = sorted(
+            [p for p in base.iterdir() if p.is_dir()],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for subdir in subdirs:
+            candidate = subdir / "model_best.pth"
+            if candidate.is_file():
+                return candidate
 
     raise FileNotFoundError(
         f"No model_best.pth under saved/models/{name} or saved/models/{config_path.stem}"

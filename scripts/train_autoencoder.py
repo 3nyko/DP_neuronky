@@ -15,13 +15,11 @@ import model.model as module_arch
 import model.loss as module_loss
 import model.metric as module_metric
 from parse_config import ConfigParser
+from params import AUTOENCODER_CONFIGS_DICT, autoencoder_config_path
 
 # =====================================================
 # =========       Constants and options       =========
 # =====================================================
-
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DEFAULT_CONFIG = os.path.join(PROJECT_ROOT, "configs", "config_autoencoder_shallow.json")
 
 SEED = 123
 torch.manual_seed(SEED)
@@ -191,9 +189,20 @@ def main(config):
 # =====================================================
 
 if __name__ == "__main__":
+    model_choices = ", ".join(sorted(AUTOENCODER_CONFIGS_DICT))
     ap = argparse.ArgumentParser(description="Train autoencoder")
-    ap.add_argument("-c", "--config", default=DEFAULT_CONFIG, type=str,
-                    help="config file path")
+    ap.add_argument(
+        "-m", "--model",
+        default=None,
+        choices=sorted(AUTOENCODER_CONFIGS_DICT),
+        help=f"autoencoder variant from params.AUTOENCODER_CONFIGS_DICT ({model_choices})",
+    )
+    ap.add_argument(
+        "-c", "--config",
+        default=None,
+        type=str,
+        help="config file path (overrides -m/--model)",
+    )
     ap.add_argument("-d", "--device", default=None, type=str,
                     help="indices of GPUs to enable")
     args = ap.parse_args()
@@ -201,7 +210,10 @@ if __name__ == "__main__":
     if args.device:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.device
 
-    with open(args.config, "r", encoding="utf-8") as f:
+    config_path = autoencoder_config_path(model=args.model, config_path=args.config)
+    print(f"Using config: {config_path}")
+
+    with open(config_path, "r", encoding="utf-8") as f:
         config_dict = json.load(f)
 
     config = ConfigParser(config=config_dict, resume=None, modification=None)

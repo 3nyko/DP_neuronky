@@ -14,13 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import data_loader.data_loaders as module_data
 import model.model as module_arch
 from parse_config import ConfigParser
-
-# =====================================================
-# =========       Constants and options       =========
-# =====================================================
-
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DEFAULT_CONFIG = os.path.join(PROJECT_ROOT, "configs", "config_autoencoder_shallow.json")
+from params import AUTOENCODER_CONFIGS_DICT, autoencoder_config_path, find_newest_model
 
 TEST_BATCH_SIZE = 512
 TEST_NUM_WORKERS = 2
@@ -97,7 +91,9 @@ def main(config):
 
     # Load test data (contains both benign and attacks)
     data_dir = config["data_loader"]["args"]["data_dir"]
-    mode = config["data_loader"]["args"].get("mode", "hexadecimal")
+    mode = config["data_loader"]["args"].get("mode", module_data.DEFAULT_MODE)
+    if isinstance(mode, str):
+        mode = module_data.Mode(mode.lower())
     test_dataset = module_data.CICIoV2024_Autoencoder_Dataset(data_dir=data_dir, mode=mode, split="test")
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False, num_workers=TEST_NUM_WORKERS
@@ -113,7 +109,7 @@ def main(config):
     resume_path = config.resume
     if resume_path is None:
         raise RuntimeError(
-            "No checkpoint given. Pass -r path/to/model_best.pth"
+            "No checkpoint given (train first or pass -r path/to/model_best.pth)."
         )
     resume_path = Path(resume_path).expanduser().resolve()
     if not resume_path.is_file():
@@ -171,13 +167,41 @@ def main(config):
 # =====================================================
 
 if __name__ == "__main__":
-    args = argparse.ArgumentParser(description="Test autoencoder anomaly detection")
-    args.add_argument("-c", "--config", default=DEFAULT_CONFIG, type=str,
-                      help="config file path")
-    args.add_argument("-r", "--resume", default=None, type=str,
-                      help="path to model_best.pth checkpoint")
-    args.add_argument("-d", "--device", default=None, type=str,
-                      help="indices of GPUs to enable")
+    model_choices = ", ".join(sorted(AUTOENCODER_CONFIGS_DICT))
+    parser = argparse.ArgumentParser(description="Test autoencoder anomaly detection")
+    parser.add_argument(
+        "-m", "--model",
+        default=None,
+        choices=sorted(AUTOENCODER_CONFIGS_DICT),
+        help=f"autoencoder variant ({model_choices}); default from params.CURRENT_AUTOENCODER",
+    )
+    parser.add_argument(
+        "-c", "--config",
+        default=None,
+        type=str,
+        help="config file path (overrides -m/--model)",
+    )
+    parser.add_argument("-r", "--resume", default=None, type=str,
+                        help="path to model_best.pth checkpoint (default: latest for this config)")
+    parser.add_argument("-d", "--device", default=None, type=str,
+                        help="indices of GPUs to enable")
+    args = parser.parse_args()
 
-    config = ConfigParser.from_args(args)
+    if args.device is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.device
+
+    config_path = autoencoder_config_path(model=args.model, config_path=args.config)
+    print(f"Using config: {config_path}")
+
+    resume = args.resume
+    if resume is None:
+        try:
+            resume = str(find_newest_model(config_path))
+        except FileNotFoundError:
+            pass
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config_dict = json.load(f)
+
+    config = ConfigParser(config=config_dict, resume=resume, modification=None)
     main(config)

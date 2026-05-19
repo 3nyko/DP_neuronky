@@ -506,7 +506,6 @@ class model_CNN_SE_Res(BaseModel):
 
         return x
 
-
 class model_tab_ft_transformer(BaseModel):
     """
     FT-Transformer-style model: each scalar feature is projected by its own linear layer (feature tokenizer),
@@ -547,7 +546,6 @@ class model_tab_ft_transformer(BaseModel):
         cls_out = h[:, 0]
         cls_out = self.norm_out(cls_out)
         return F.log_softmax(self.head(cls_out), dim=1)
-
 
 class model_CNN_multiscale(BaseModel):
     """
@@ -707,7 +705,6 @@ class model_autoencoder_shallow(BaseModel):
         z = self.encoder(x)
         return self.decoder(z)
 
-
 class model_autoencoder_deep(BaseModel):
     """
     Deeper autoencoder with batch norm and dropout for better generalization.
@@ -749,7 +746,6 @@ class model_autoencoder_deep(BaseModel):
         x = x.view(x.size(0), -1)
         z = self.encoder(x)
         return self.decoder(z)
-
 
 # =====================================================
 # =========           MNIST model             =========
