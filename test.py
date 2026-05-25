@@ -1,4 +1,5 @@
 import argparse
+import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -42,6 +43,9 @@ def get_class_labels(n_classes):
     if n_classes == len(module_data.MULTICLASS_DICT):
         inv_map = {v: k for k, v in module_data.MULTICLASS_DICT.items()}
         class_labels = [inv_map.get(i, str(i)) for i in range(n_classes)]
+    elif n_classes == len(module_data.CAR_MULTICLASS_DICT):
+        inv_map = {v: k for k, v in module_data.CAR_MULTICLASS_DICT.items()}
+        class_labels = [inv_map.get(i, str(i)) for i in range(n_classes)]
     elif n_classes == len(module_data.BINCLASS_DICT):
         inv_map = {v: k for k, v in module_data.BINCLASS_DICT.items()}
         class_labels = [inv_map.get(i, str(i)) for i in range(n_classes)]
@@ -80,6 +84,32 @@ def save_confusion_matrix(cm, n_classes, class_labels, output_path):
     plt.close(fig)
 
 
+def log_test_results(logger, metrics: dict, timing: dict, class_labels: list[str]) -> None:
+    """Log classification metrics and inference timing (same style as autoencoder test)."""
+    logger.info("Test results:")
+    logger.info(f"    {'accuracy':25s}: {metrics['accuracy']:.6f}")
+    logger.info(f"    {'precision_macro':25s}: {metrics['precision_macro']:.6f}")
+    logger.info(f"    {'recall_macro':25s}: {metrics['recall_macro']:.6f}")
+    logger.info(f"    {'f1_macro':25s}: {metrics['f1_macro']:.6f}")
+    logger.info(f"    {'precision_weighted':25s}: {metrics['precision_weighted']:.6f}")
+    logger.info(f"    {'recall_weighted':25s}: {metrics['recall_weighted']:.6f}")
+    logger.info(f"    {'f1_weighted':25s}: {metrics['f1_weighted']:.6f}")
+
+    logger.info("Per-class metrics:")
+    for class_idx, scores in metrics["per_class"].items():
+        label = class_labels[class_idx] if class_idx < len(class_labels) else str(class_idx)
+        logger.info(
+            f"    {label:12s}  P={scores['precision']:.4f}  "
+            f"R={scores['recall']:.4f}  F1={scores['f1']:.4f}  n={scores['support']}"
+        )
+
+    logger.info("Inference timing:")
+    logger.info(f"    {'samples':25s}: {timing['n_samples']}")
+    logger.info(f"    {'inference_time_s':25s}: {timing['inference_time_s']:.4f}")
+    logger.info(f"    {'ms_per_sample':25s}: {timing['ms_per_sample']:.4f}")
+    logger.info(f"    {'samples_per_sec':25s}: {timing['samples_per_sec']:.2f}")
+
+
 # =====================================================
 # =========              Main                 =========
 # =====================================================
@@ -87,13 +117,18 @@ def save_confusion_matrix(cm, n_classes, class_labels, output_path):
 def main(config):
     logger = config.get_logger("test")
 
-    # setup data_loader
-    data_loader = getattr(module_data, config["data_loader"]["type"])(
-        config["data_loader"]["args"]["data_dir"],
-        batch_size=TEST_BATCH_SIZE,
-        shuffle=True,
-        num_workers=TEST_NUM_WORKERS,
-    )
+    loader_type = config["data_loader"]["type"]
+    loader_args = dict(config["data_loader"]["args"])
+    loader_args.setdefault("batch_size", TEST_BATCH_SIZE)
+    loader_args.setdefault("shuffle", False)
+    loader_args.setdefault("num_workers", TEST_NUM_WORKERS)
+    if hasattr(module_data, "_safe_num_workers"):
+        loader_args["num_workers"] = module_data._safe_num_workers(
+            loader_args["num_workers"]
+        )
+    loader_args["split"] = "test"
+
+    data_loader = getattr(module_data, loader_type)(**loader_args)
 
     # build model architecture
     model = config.init_obj("arch", module_arch)
@@ -125,14 +160,19 @@ def main(config):
     model = model.to(device)
     model.eval()
 
-    # run inference
+    # run inference (timed)
     total_loss = 0.0
     total_metrics = torch.zeros(len(metric_fns))
     all_targets = []
     all_preds = []
+    n_samples = len(data_loader.data_loader.dataset)
+
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    inference_start = time.perf_counter()
 
     with torch.no_grad():
-        for i, (data, target) in enumerate(tqdm(data_loader)):
+        for batch_idx, (data, target) in enumerate(tqdm(data_loader)):
             data, target = data.to(device), target.to(device)
             output = model(data)
             preds = torch.argmax(output, dim=1)
@@ -142,23 +182,34 @@ def main(config):
             loss = loss_fn(output, target)
             batch_size = data.shape[0]
             total_loss += loss.item() * batch_size
-            for i, metric in enumerate(metric_fns):
-                total_metrics[i] += metric(output, target) * batch_size
+            for m_idx, metric in enumerate(metric_fns):
+                total_metrics[m_idx] += metric(output, target) * batch_size
 
-    # aggregate results
-    n_samples = len(data_loader.data_loader.dataset)
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    inference_time_s = time.perf_counter() - inference_start
+
+    # loss + config metrics (accuracy, top_k_acc, ...)
     log = {"loss": total_loss / n_samples}
     log.update({
         met.__name__: total_metrics[i].item() / n_samples for i, met in enumerate(metric_fns)
     })
     logger.info(log)
 
-    # build and save confusion matrix
     y_true = torch.cat(all_targets).numpy()
     y_pred = torch.cat(all_preds).numpy()
 
     cm, n_classes = build_confusion_matrix(y_true, y_pred)
     class_labels = get_class_labels(n_classes)
+    cls_metrics = module_metric.multiclass_metrics_from_confusion_matrix(cm)
+
+    timing = {
+        "n_samples": n_samples,
+        "inference_time_s": inference_time_s,
+        "ms_per_sample": (inference_time_s / n_samples) * 1000.0 if n_samples else 0.0,
+        "samples_per_sec": n_samples / inference_time_s if inference_time_s > 0 else 0.0,
+    }
+    log_test_results(logger, cls_metrics, timing, class_labels)
 
     output_pdf = Path(config.log_dir) / "confusion_matrix.pdf"
     save_confusion_matrix(cm, n_classes, class_labels, output_pdf)
@@ -172,7 +223,7 @@ def main(config):
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description="PyTorch Template")
     args.add_argument("-c", "--config", default=DEFAULT_CONFIG_PATH, type=str,
-                      help="config file path (default: split)")
+                      help="config file path (default: from params.py)")
     args.add_argument("-r", "--resume", default=DEFAULT_MODEL, type=str,
                       help="path to latest checkpoint (default: None)")
     args.add_argument("-d", "--device", default=None, type=str,

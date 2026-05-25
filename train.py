@@ -218,7 +218,7 @@ def main(config):
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description="PyTorch Template")
     args.add_argument("-c", "--config", default=DEFAULT_CONFIG_PATH, type=str,
-                      help="config file path (default: None)")
+                      help="config file path (default: from params.py)")
     args.add_argument("-r", "--resume", default=None, type=str,
                       help="path to latest checkpoint (default: None)")
     args.add_argument("-d", "--device", default=None, type=str,

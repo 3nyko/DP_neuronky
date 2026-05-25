@@ -1,4 +1,7 @@
 import os
+import sys
+
+import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -34,6 +37,15 @@ MULTICLASS_DICT = {
     "RPM" : 3,
     "SPEED" : 4,
     "STEERING_WHEEL" : 5
+}
+
+# Car-Hacking Dataset (prepare_car_hacking_dataset.py)
+CAR_MULTICLASS_DICT = {
+    "BENIGN": 0,
+    "DOS": 1,
+    "FUZZY": 2,
+    "GEAR": 3,
+    "RPM": 4,
 }
 
 
@@ -222,6 +234,118 @@ class CICIoV2024_DataLoader:
     def split_validation(self):
         """Return validation DataLoader"""
         return self.valid_data_loader
+
+def _safe_num_workers(num_workers: int) -> int:
+    """Windows spawn cannot pickle huge pandas datasets used by workers."""
+    if sys.platform == "win32" and num_workers > 0:
+        return 0
+    return num_workers
+
+
+class Car_Hacking_Dataset(Dataset):
+    """
+    Split Car-Hacking CSVs (flat layout: data_dir/train.csv, val.csv, test.csv).
+    Features are decimal integers: ID + DATA_0..DATA_7.
+    """
+
+    def __init__(self, data_dir, split="train", multiclass=USE_MULTICLASS):
+        if split not in ("train", "val", "test"):
+            raise ValueError(f"Invalid split: {split}")
+
+        self.file_path = os.path.join(data_dir, f"{split}.csv")
+        if not os.path.isfile(self.file_path):
+            raise FileNotFoundError(f"CSV file not found: {self.file_path}")
+
+        df = pd.read_csv(self.file_path, low_memory=False)
+        df.columns = [c.strip() for c in df.columns]
+
+        if multiclass:
+            label_data = df["specific_class"]
+        else:
+            label_data = df["label"]
+
+        self.features = np.ascontiguousarray(
+            self._extract_features(df), dtype=np.float32
+        )
+        self.labels = self._map_labels(label_data, multiclass)
+
+    def _extract_features(self, df):
+        feature_cols = []
+        if "ID" in df.columns:
+            feature_cols.append("ID")
+        data_cols = sorted(
+            [c for c in df.columns if c.startswith("DATA_")],
+            key=lambda c: int(c.split("_")[1]),
+        )
+        if not data_cols:
+            raise ValueError("No DATA_ columns found in dataset.")
+        feature_cols.extend(data_cols)
+        return df[feature_cols].to_numpy()
+
+    def _map_labels(self, labels, multiclass=False):
+        class_dict = CAR_MULTICLASS_DICT if multiclass else BINCLASS_DICT
+        mapped = labels.astype(str).str.strip().str.upper().map(class_dict)
+        if mapped.isna().any():
+            unknown = sorted(labels[mapped.isna()].astype(str).unique())
+            raise ValueError(f"Unknown class label(s): {unknown}")
+        return mapped.to_numpy(dtype=np.int64)
+
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, idx):
+        x = torch.from_numpy(self.features[idx])
+        y = torch.tensor(self.labels[idx], dtype=torch.long)
+        return x, y
+
+
+class Car_Hacking_DataLoader:
+    """DataLoader for data/Car_hacking_split (train.csv / val.csv / test.csv)."""
+
+    def __init__(
+        self,
+        data_dir,
+        batch_size,
+        num_workers=2,
+        shuffle=True,
+        split="train",
+        multiclass=USE_MULTICLASS,
+        **kwargs,
+    ):
+        kwargs.pop("mode", None)
+        num_workers = _safe_num_workers(num_workers)
+        self.batch_size = batch_size
+        dataset = Car_Hacking_Dataset(
+            data_dir=data_dir, split=split, multiclass=multiclass
+        )
+        shuff = shuffle if split == "train" else False
+        self.data_loader = torch.utils.data.DataLoader(
+            dataset, batch_size=batch_size, shuffle=shuff, num_workers=num_workers
+        )
+
+        self.valid_data_loader = None
+        if split == "train":
+            val_dataset = Car_Hacking_Dataset(
+                data_dir=data_dir, split="val", multiclass=multiclass
+            )
+            self.valid_data_loader = torch.utils.data.DataLoader(
+                val_dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=num_workers,
+            )
+
+        self.input_dim = dataset[0][0].shape[-1]
+
+    def __iter__(self):
+        return iter(self.data_loader)
+
+    def __len__(self):
+        return len(self.data_loader)
+
+    def split_validation(self):
+        return self.valid_data_loader
+
 
 class CICIoV2024_DataLoader_no_split(BaseDataLoader):
     """

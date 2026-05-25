@@ -4,7 +4,7 @@ import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from params import *
+from params import CURRENT_DATASET, ensure_model_config
 import train
 from parse_config import ConfigParser
 
@@ -44,10 +44,11 @@ def train_model(conf_path: str):
 # =====================================================
 
 def main():
+    print(f"Dataset: {CURRENT_DATASET}")
     for model_name in MODELS_TO_TRAIN:
-        curr_conf = dict_conf[model_name]
-        curr_conf_path = os.path.join(CONFIGS_DIR, f"{curr_conf}.json")
-        print(f"\n=== Training {model_name} ===")
+        curr_conf_path = str(ensure_model_config(model_name, CURRENT_DATASET))
+        print(f"\n=== Training {model_name} ({CURRENT_DATASET}) ===")
+        print(f"  Config: {curr_conf_path}")
         train_model(curr_conf_path)
 
 

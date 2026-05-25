@@ -5,7 +5,7 @@ import importlib
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from params import *
+from params import CURRENT_DATASET, ensure_model_config, find_newest_model
 from parse_config import ConfigParser
 
 test_module = importlib.import_module("test")
@@ -28,9 +28,11 @@ MODELS_TO_TEST = [
 # =========           Functions               =========
 # =====================================================
 
-def test_model(conf_path: str):
+def test_model(model_name: str):
     """Load config JSON, find best checkpoint, and run testing."""
-    resume_path = str(find_newest_model(conf_path))
+    conf_path = ensure_model_config(model_name, CURRENT_DATASET)
+    resume_path = str(find_newest_model(model_name, CURRENT_DATASET))
+    print(f"  Config: {conf_path}")
     print(f"  Checkpoint: {resume_path}")
 
     with open(conf_path, "r", encoding="utf-8") as f:
@@ -45,12 +47,11 @@ def test_model(conf_path: str):
 # =====================================================
 
 def main():
+    print(f"Dataset: {CURRENT_DATASET}")
     for model_name in MODELS_TO_TEST:
-        curr_conf = dict_conf[model_name]
-        curr_conf_path = os.path.join(CONFIGS_DIR, f"{curr_conf}.json")
-        print(f"\n=== Testing {model_name} ===")
+        print(f"\n=== Testing {model_name} ({CURRENT_DATASET}) ===")
         try:
-            test_model(curr_conf_path)
+            test_model(model_name)
         except FileNotFoundError as e:
             print(f"  SKIPPED (no checkpoint): {e}")
         except RuntimeError as e:
